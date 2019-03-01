@@ -1,0 +1,7 @@
+!
+event manager applet config_change
+ event syslog pattern "SYS-5-CONFIG_I"
+ action 0 cli command "enable"
+ action 1 cli command "guestshell run python /bootflash/DevNet_Create_2018_p/config_change.py"
+ action 2 cli command "exit"
+!
