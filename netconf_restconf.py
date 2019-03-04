@@ -7,6 +7,7 @@ import requests
 import ncclient
 import xml
 import xml.dom.minidom
+import json
 
 from ncclient import manager
 
@@ -18,6 +19,7 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)  # Disable in
 
 
 ROUTER_AUTH = HTTPBasicAuth(USER, PASS)
+
 
 def get_netconf_int_oper_status(interface):
     """
@@ -54,15 +56,14 @@ def get_netconf_int_oper_status(interface):
         return oper_status
 
 
-def get_restconf_int_oper_status(interface):
+def get_restconf_int_oper_data(interface):
 
     url = 'https://' + HOST + '/restconf/data/interfaces-state/interface=' + interface
     header = {'Content-type': 'application/yang-data+json', 'accept': 'application/yang-data+json'}
     response = requests.get(url, headers=header, verify=False, auth=ROUTER_AUTH)
     interface_info = response.json()
     oper_data = interface_info['ietf-interfaces:interface']
-    oper_status = oper_data['oper-status']
-    return oper_status
+    return oper_data
 
 
 def get_netconf_hostname():
@@ -102,8 +103,10 @@ def get_restconf_hostname():
 
 print(str('Interface Operational Status via NETCONF: \n' + get_netconf_int_oper_status('GigabitEthernet1')))
 
-print(str('Interface Operational Status via RESTCONF: \n' + get_restconf_int_oper_status('GigabitEthernet1')))
+oper_data = get_restconf_int_oper_data('GigabitEthernet1')
+print('Interface Operational Data via RESTCONF: \n')
+print(json.dumps(oper_data, indent=4, separators=(' , ', ' : ')))
 
-print(str('Device Hostname via NETCONF: \n' + get_netconf_hostname()))
+# print(str('Device Hostname via NETCONF: \n' + get_netconf_hostname()))
 
 print(str('Device Hostname via RESTCONF: \n' + get_restconf_hostname()))

@@ -2,11 +2,12 @@
 # developed by Gabi Zapodeanu, TSA, Global Partner Organization
 
 
-from cli import cli
+from cli import cli, execute, configure
 import time
 import difflib
 import requests
 import json
+import logging
 
 from config import WEBEX_TEAMS_URL, WEBEX_TEAMS_AUTH, WEBEX_TEAMS_SPACE, WEBEX_TEAMS_MEMBER
 from config import HOST, USER, PASS
@@ -25,45 +26,84 @@ def save_config():
 
     # save running configuration, use local time to create new config file name
 
-    output = cli('show run')
+    output = execute('show run')
     timestr = time.strftime('%Y%m%d-%H%M%S')
     filename = '/bootflash/CONFIG_FILES/' + timestr + '_shrun'
 
     f = open(filename, 'w')
     f.write(output)
-    f.close
+    f.close()
 
     f = open('/bootflash/CONFIG_FILES/current_config_name', 'w')
     f.write(filename)
-    f.close
+    f.close()
 
     return filename
 
 
 def compare_configs(cfg1, cfg2):
+    """
+    This function, using the unified diff function, will compare two config files and identify the changes.
+    '+' or '-' will be prepended in front of the lines with changes
+    :param cfg1: old configuration file path and filename
+    :param cfg2: new configuration file path and filename
+    :return: text with the configuration lines that changed. The return will include the configuration for the sections
+    that include the changes
+    """
 
-    # compare two config files
+    # open the old and new configuration fiels
+    f1 = open(cfg1, 'r')
+    old_cfg = f1.readlines()
+    f1.close()
 
-    d = difflib.unified_diff(cfg1, cfg2)
+    f2 = open(cfg2, 'r')
+    new_cfg = f2.readlines()
+    f2.close()
 
-    diffstr = ''
+    # compare the two specified config files {cfg1} and {cfg2}
+    d = difflib.unified_diff(old_cfg, new_cfg, n=9)
+
+    # create a diff_list that will include all the lines that changed
+    # create a diff_output string that will collect the generator output from the unified_diff function
+    diff_list = []
+    diff_output = ''
 
     for line in d:
+        diff_output += line
         if line.find('Current configuration') == -1:
             if line.find('Last configuration change') == -1:
                 if (line.find('+++') == -1) and (line.find('---') == -1):
                     if (line.find('-!') == -1) and (line.find('+!') == -1):
-                       if line.startswith('+'):
-                            diffstr = diffstr + '\n' + line
-                       elif line.startswith('-'):
-                            diffstr = diffstr + '\n' + line
+                        if line.startswith('+'):
+                            diff_list.append('\n' + line)
+                        elif line.startswith('-'):
+                            diff_list.append('\n' + line)
 
-    return diffstr
+    # process the diff_output to select only the sections between '!' characters for the sections that changed,
+    # replace the empty '+' or '-' lines with space
+    diff_output = diff_output.replace('+!', '!')
+    diff_output = diff_output.replace('-!', '!')
+    diff_output_list = diff_output.split('!')
+
+    all_changes = []
+
+    for changes in diff_list:
+        for config_changes in diff_output_list:
+            if changes in config_changes:
+                if config_changes not in all_changes:
+                    all_changes.append(config_changes)
+
+    # create a config_text string with all the sections that include changes
+    config_text = ''
+    for items in all_changes:
+        config_text += items
+
+    return config_text
 
 
 def create_room(room_name):
 
-    # create spark room
+    # create webex teams room
 
     payload = {'title': room_name}
     url = WEBEX_TEAMS_URL + '/rooms'
@@ -103,7 +143,7 @@ def delete_room(room_id):
 
 def post_room_message(room_id, message):
 
-    # post message to the Spark room with the room id
+    # post message to the webex teams room with the room id
 
     payload = {'roomId': room_id, 'text': message}
     url = WEBEX_TEAMS_URL + '/messages'
@@ -117,10 +157,13 @@ def last_user_message(room_id):
 
     url = WEBEX_TEAMS_URL + '/messages?roomId=' + room_id
     header = {'content-type': 'application/json', 'authorization': WEBEX_TEAMS_AUTH}
-    response = requests.get(url, headers=header, verify=False)
-    list_messages_json = response.json()
-    list_messages = list_messages_json['items']
-    last_message = list_messages[0]['text']
+    try:
+        response = requests.get(url, headers=header, verify=False)
+        list_messages_json = response.json()
+        list_messages = list_messages_json['items']
+        last_message = list_messages[0]['text']
+    except:
+        last_message = 'Approve y/n ?'
     return last_message
 
 
@@ -152,7 +195,6 @@ def create_incident(description, comment, username, severity):
     # This function will create a new incident with the {description}, {comments}, severity for the {user}
 
     caller_sys_id = get_user_sys_id(username)
-    print caller_sys_id
     url = SNOW_URL + '/table/incident'
     payload = {'short_description': description,
                'comments': (comment + ', \nIncident created using APIs by caller ' + username),
@@ -160,14 +202,23 @@ def create_incident(description, comment, username, severity):
                'urgency': severity
                }
     headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
+    logging.debug('Create new incident')
     response = requests.post(url, auth=(SNOW_USER, SNOW_PASS), data=json.dumps(payload), headers=headers)
     incident_json = response.json()
-    return incident_json['result']['number']
+    incident_number = incident_json['result']['number']
+    logging.debug('Incident created: ' + str(incident_number))
+    return incident_number
 
 
 # main application
 
-syslog_input = cli('show logging | in %SYS-5-CONFIG_I')
+logging.basicConfig(
+    filename='/bootflash/DEVWKS-1301-MEL19/application_run.log',
+    level=logging.DEBUG,
+    format='%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S')
+
+syslog_input = execute('show logging | in %SYS-5-CONFIG_I')
 syslog_lines = syslog_input.split('\n')
 lines_no = len(syslog_lines)-2
 user_info = syslog_lines[lines_no]
@@ -175,72 +226,24 @@ user_info = syslog_lines[lines_no]
 old_cfg_fn = '/bootflash/CONFIG_FILES/base-config'
 new_cfg_fn = save_config()
 
-f = open(old_cfg_fn)
-old_cfg = f.readlines()
-f.close
-
-f = open(new_cfg_fn)
-new_cfg = f.readlines()
-f.close
-
-diff = compare_configs(old_cfg,new_cfg)
-print diff
+diff = compare_configs(old_cfg_fn, new_cfg_fn)
+print(diff)
 
 f = open('/bootflash/CONFIG_FILES/diff', 'w')
 f.write(diff)
-f.close
+f.close()
 
 if diff != '':
     # find the device hostname using RESTCONF
     device_name = get_restconf_hostname()
-    print('Hostname: ', device_name)
-    spark_room_id = create_room(WEBEX_TEAMS_SPACE)
-    add_room_membership(spark_room_id, WEBEX_TEAMS_MEMBER)
-    post_room_message(spark_room_id, 'The device with the hostname: ' + device_name + ', detected these configuration changes:')
-    post_room_message(spark_room_id, diff)
-    post_room_message(spark_room_id, '   ')
-    post_room_message(spark_room_id, 'Configuration changed by user ' + user_info)
-    post_room_message(spark_room_id, 'Approve y/n ?')
-    counter = 6  # wait for approval = 10 seconds * counter, in this case 10 sec x 6 = 60 seconds
-    last_message = last_user_message(spark_room_id)
-    # start approval process
-    while last_message == 'Approve y/n ?':
-        time.sleep(10)
-        last_message = last_user_message(spark_room_id)
-        print(last_message)
-        if last_message == 'n':
-            cli('configure replace flash:/CONFIG_FILES/base-config force')
-            approval_result = 'Configuration changes not approved, Configuration rollback to baseline'
-            print('Configuration roll back completed')
-            break
-        else:
-            if last_message == 'y':
-                print('Configuration change approved')
-                # save new baseline running configuration
-                output = cli('show run')
-                filename = '/bootflash/CONFIG_FILES/base-config'
-                f = open(filename, "w")
-                f.write(output)
-                f.close
-                print('Saved new baseline configuration')
-                approval_result = 'Configuration changes approved, Saved new baseline configuration'
-                break
-            else:
-                counter -= 1
-                post_room_message(spark_room_id, 'Approve y/n ?')
-                if counter == 0:
-                    cli('configure replace flash:/CONFIG_FILES/base-config force')
-                    approval_result = 'Approval request timeout, Configuration rollback to baseline'
-                    print('Configuration roll back completed')
-                    break
+    print('Hostname: ', str(device_name))
 
-    post_room_message(spark_room_id, approval_result)
+    # create new incident
+    comments = ('The device with the hostname: ' + device_name + ',\ndetected these configuration changes: \n' + diff)
+    comments += ('\nConfiguration changed by user: ' + user_info + '\n')
+    new_incident = create_incident('Configuration Change Notification Test - ' + device_name, comments, SNOW_USER, 3)
+    print('Created new ServiceNow incident with the number: ', str(new_incident))
 
-    post_room_message(spark_room_id, 'This room will be deleted in 30 seconds')
-    time.sleep(10)
-    delete_room(spark_room_id)
 
-    comments = ('The device with the hostname: ' + device_name + ',\ndetected these configuration changes: \n' + diff + '\nConfiguration changed by user: ' + user_info + '\n' + approval_result)
-    create_incident('Configuration Change Notification - ' + device_name, comments, SNOW_USER, 3)
-
+logging.debug('End Application Run')
 print('End Application Run')

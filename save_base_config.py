@@ -1,16 +1,23 @@
 
 # developed by Gabi Zapodeanu, TSA, Global Partner Organization
 
-from cli import cli
+import cli
+from cli import cli, execute, configure
 
 # add additional vty lines, two required for EEM
 # save baseline running configuration
 
-cli('configure terminal ; line vty 0 15 ; length 0 ; transport input ssh ; exit')
 
-output = cli('show run')
+configure('no ip http active-session-modules none ; line vty 0 15 ; length 0 ; transport input ssh ; exit')
+
+
+output = execute('show run')
 filename = '/bootflash/CONFIG_FILES/base-config'
 
-f = open(filename, "w")
+f = open(filename, 'w')
 f.write(output)
-f.close
+f.close()
+
+execute('copy run start')
+
+print('\nEnd of saving configuration app\n')
