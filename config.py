@@ -12,7 +12,7 @@ WEBEX_TEAMS_MEMBER = 'gzapodea@cisco.com'
 
 SNOW_URL = 'https://dev48476.service-now.com/api/now'
 SNOW_USER = 'IOSXE'
-SNOW_PASS = 'Read lab instructions'
+SNOW_PASS = 'Clive19!'
 SNOW_INSTANCE = 'dev48476'
 
 
