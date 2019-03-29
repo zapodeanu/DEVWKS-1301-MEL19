@@ -2,7 +2,7 @@
 # developed by Gabi Zapodeanu, TSA, Global Partner Organization
 
 
-from cli import cli, execute, configure
+import cli
 import time
 import difflib
 import requests
@@ -15,6 +15,9 @@ from config import SNOW_URL, SNOW_USER, SNOW_PASS
 
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from requests.auth import HTTPBasicAuth  # for Basic Auth
+
+from time import sleep
+from cli import cli, execute, configure
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)  # Disable insecure https warnings
 
@@ -152,24 +155,20 @@ def post_room_message(room_id, message):
 
 
 def last_user_message(room_id):
-
     # retrieve the last message from the room with the room id
-
+    last_message_text = 'none'
     url = WEBEX_TEAMS_URL + '/messages?roomId=' + room_id
     header = {'content-type': 'application/json', 'authorization': WEBEX_TEAMS_AUTH}
-    try:
-        response = requests.get(url, headers=header, verify=False)
-        list_messages_json = response.json()
-        list_messages = list_messages_json['items']
-        last_messages = list_messages[0]['text']
-    except:
-        last_messages = 'Approve y/n ?'
-    return last_messages
+    response = requests.get(url, headers=header, verify=False)
+    list_messages_json = response.json()
+    list_messages = list_messages_json['items']
+    last_message_text = list_messages[0]['text']
+    return str(last_message_text)
 
 
 def get_restconf_hostname():
 
-    # retrieve using RETSCONF the network device hostname
+    # retrieve using RESTCONF the network device hostname
 
     url = 'https://' + HOST + '/restconf/data/Cisco-IOS-XE-native:native/hostname'
     header = {'Content-type': 'application/yang-data+json', 'accept': 'application/yang-data+json'}
@@ -212,6 +211,8 @@ def create_incident(description, comment, username, severity):
 
 # main application
 
+execute('send log Application config_change_approve.py started')
+
 logging.basicConfig(
     filename='/bootflash/DEVWKS-1301-MEL19/application_run.log',
     level=logging.DEBUG,
@@ -243,61 +244,50 @@ if diff != '':
     add_room_membership(webex_teams_room_id, WEBEX_TEAMS_MEMBER)
     post_room_message(webex_teams_room_id, 'The device with the hostname: ' + device_name + ', detected these configuration changes:')
     post_room_message(webex_teams_room_id, diff)
-    post_room_message(webex_teams_room_id, '   ')
-    post_room_message(webex_teams_room_id, 'Configuration changed by user ' + user_info)
+    post_room_message(webex_teams_room_id, '  \nConfiguration changed by user ' + user_info + '\n\n')
     post_room_message(webex_teams_room_id, 'Approve y/n ?')
 
     # start approval process
-    counter = 3  # wait for approval = 10 seconds * counter, in this case 10 sec x 3 = 30 seconds
     approval_result = 'none'
-
-    while counter > 0:  # loop until timeout, 3 x sleep time
-        time.sleep(5)
-        last_message = last_user_message(webex_teams_room_id)
-        print('Last Webex Teams message: ', last_message)
-
-        if last_message == 'n':
-            # configuration changes not approved, rolled back
-            execute('configure replace flash:/CONFIG_FILES/base-config force')
-            approval_result = 'Configuration changes not approved, Configuration rollback to baseline'
-            print(approval_result)
-            logging.debug(approval_result)  # log to the application_log file
-            counter = 0
-        else:
-            if last_message == 'y':
-                # configuration changes approved
-                # save running configuration to the baseline file
-                output = execute('show run')
-                filename = '/bootflash/CONFIG_FILES/base-config'
-                f = open(filename, 'w')
-                f.write(output)
-                f.close()
-                approval_result = 'Configuration changes approved, Saved new baseline configuration'
-                print(approval_result)
-                logging.debug(approval_result)  # log to the application_log file
-                counter = 0
-            else:
-                counter -= 1
-                if counter == 0:
-                    # approval request timeout, configuration roll back
-                    execute('configure replace flash:/CONFIG_FILES/base-config force')
-                    approval_result = 'Approval request timeout, Configuration rollback to baseline'
-                    print(approval_result)
-                    logging.debug(approval_result)  # log to the application_log file
-                else:
-                    post_room_message(webex_teams_room_id, 'Approve y/n ?')
-
-    # post approval result in webex teams room
-    post_room_message(webex_teams_room_id, approval_result)
+    sleep(30)
+    last_message = last_user_message(webex_teams_room_id)
+    print('Last Webex Teams message: ', last_message)
+    if last_message == 'n':
+        # configuration changes not approved, rolled back
+        execute('configure replace flash:/CONFIG_FILES/base-config force')
+        approval_result = 'Configuration changes not approved, Configuration rollback to baseline'
+        print(approval_result)
+        logging.debug(approval_result)  # log to the application_log file
+        post_room_message(webex_teams_room_id, approval_result)
+    elif last_message == 'y':
+        # configuration changes approved
+        # save running configuration to the baseline file
+        output = execute('show run')
+        filename = '/bootflash/CONFIG_FILES/base-config'
+        f = open(filename, 'w')
+        f.write(output)
+        f.close()
+        approval_result = 'Configuration changes approved, Saved new baseline configuration'
+        print(approval_result)
+        logging.debug(approval_result)  # log to the application_log file
+        post_room_message(webex_teams_room_id, approval_result)
+    else:
+        # approval request timeout, configuration roll back
+        execute('configure replace flash:/CONFIG_FILES/base-config force')
+        approval_result = 'Approval request timeout, Configuration rollback to baseline'
+        print(approval_result)
+        logging.debug(approval_result)  # log to the application_log file
+        post_room_message(webex_teams_room_id, approval_result)
 
     post_room_message(webex_teams_room_id, 'This room will be deleted in 10 seconds')
-    time.sleep(10)
+    sleep(10)
     delete_room(webex_teams_room_id)
 
     comments = ('The device with the hostname: ' + device_name + ',\ndetected these configuration changes: \n' + diff)
     comments += ('\nConfiguration changed by user: ' + user_info + '\n' + approval_result)
     create_incident('Configuration Change Notification - ' + device_name, comments, SNOW_USER, 3)
 
+execute('send log End Application Run')
 logging.debug('End Application Run')
 
 print('End Application Run')

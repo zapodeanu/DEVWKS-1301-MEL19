@@ -9,7 +9,6 @@ import requests
 import json
 import logging
 
-from config import WEBEX_TEAMS_URL, WEBEX_TEAMS_AUTH, WEBEX_TEAMS_SPACE, WEBEX_TEAMS_MEMBER
 from config import HOST, USER, PASS
 from config import SNOW_URL, SNOW_USER, SNOW_PASS
 
@@ -99,72 +98,6 @@ def compare_configs(cfg1, cfg2):
         config_text += items
 
     return config_text
-
-
-def create_room(room_name):
-
-    # create webex teams room
-
-    payload = {'title': room_name}
-    url = WEBEX_TEAMS_URL + '/rooms'
-    header = {'content-type': 'application/json', 'authorization': WEBEX_TEAMS_AUTH}
-    room_response = requests.post(url, data=json.dumps(payload), headers=header, verify=False)
-    room_json = room_response.json()
-    room_id = room_json['id']
-    print('Created room with the name ' + room_name, 'room id: ', room_id)
-    return room_id
-
-
-def add_room_membership(room_id, email_invite):
-
-    # invite membership to the room id
-
-    payload = {'roomId': room_id, 'personEmail': email_invite, 'isModerator': 'true'}
-    url = WEBEX_TEAMS_URL + '/memberships'
-    header = {'content-type': 'application/json', 'authorization': WEBEX_TEAMS_AUTH}
-    membership_response = requests.post(url, data=json.dumps(payload), headers=header, verify=False)
-    membership_json = membership_response.json()
-    try:
-        membership = membership_json['personEmail']
-    except:
-        membership = None
-    return membership
-
-
-def delete_room(room_id):
-
-    # delete room with the room id
-
-    url = WEBEX_TEAMS_URL + '/rooms/' + room_id
-    header = {'content-type': 'application/json', 'authorization': WEBEX_TEAMS_AUTH}
-    response = requests.delete(url, headers=header, verify=False)
-    print('Print delete room request status: ', response.status_code, room_id)
-
-
-def post_room_message(room_id, message):
-
-    # post message to the webex teams room with the room id
-
-    payload = {'roomId': room_id, 'text': message}
-    url = WEBEX_TEAMS_URL + '/messages'
-    header = {'content-type': 'application/json', 'authorization': WEBEX_TEAMS_AUTH}
-    requests.post(url, data=json.dumps(payload), headers=header, verify=False)
-
-
-def last_user_message(room_id):
-
-    # retrieve the last message from the room with the room id
-
-    url = WEBEX_TEAMS_URL + '/messages?roomId=' + room_id
-    header = {'content-type': 'application/json', 'authorization': WEBEX_TEAMS_AUTH}
-    try:
-        response = requests.get(url, headers=header, verify=False)
-        list_messages_json = response.json()
-        list_messages = list_messages_json['items']
-        last_message = list_messages[0]['text']
-    except:
-        last_message = 'Approve y/n ?'
-    return last_message
 
 
 def get_restconf_hostname():

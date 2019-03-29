@@ -16,7 +16,7 @@ SNOW_PASS = 'Read lab instructions'
 SNOW_INSTANCE = 'dev48476'
 
 
-HOST = '10.1.1.1'
+HOST = '10.10.20.48'
 USER = 'cisco'
 PASS = 'cisco_1234!'
 PORT = '830'
