@@ -34,7 +34,7 @@ you create your first ChatOps application using NETCONF, RESTCONF, and Guest She
 
 - A network engineer makes an IOS XE device configuration change
 - Syslog triggers Embedded Event Manager applet execution
-- This will in Guest Shell a Python script execution
+- This will start a Python script running in Guest Shell
 - The config_change.py script will:
     - Detect if a configuration change
     - Collect the device hostname using RESTCONF
