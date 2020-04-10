@@ -20,7 +20,7 @@ you create your first ChatOps application using NETCONF, RESTCONF, and Guest She
 - You will need Python 2.7 and 3.x installed
 - requests and ncclient libraries
 
-**The repo includes these files**
+**The repo includes these files:**
 
 - config.py - configuration file that includes accounts username and password
 - eem_cli_config.txt - cli configuration for the CSR1000V router that will be used during the workshop
@@ -30,10 +30,11 @@ you create your first ChatOps application using NETCONF, RESTCONF, and Guest She
 - config_change_incident.py - test Embedded Event Manager and Guest Shell 
 - config_change_approve.py - application code
 
-**Application Workflow**
+**Application Workflow:**
 
-- User makes IOS XE device configuration change
-- Syslog triggers EEM Guest Shell Python script execution
+- A network engineer makes an IOS XE device configuration change
+- Syslog triggers Embedded Event Manager applet execution
+- This will in Guest Shell a Python script execution
 - The config_change.py script will:
     - Detect if a configuration change
     - Collect the device hostname using RESTCONF
